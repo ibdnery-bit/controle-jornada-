@@ -20,16 +20,18 @@ DURACAO_ATIVIDADE = {
 # --- FUNÇÕES PARA SALVAR E CARREGAR DADOS ---
 def salvar_dados():
     em_jornada_serializavel = []
-    for item in st.session_state.em_jornada:
-        copia = item.copy()
-        if isinstance(copia.get("DataFim"), datetime):
-            copia["DataFim"] = copia["DataFim"].strftime("%Y-%m-%d %H:%M:%S")
-        if isinstance(copia.get("DataInicioDT"), datetime):
-            copia["DataInicioDT"] = copia["DataInicioDT"].strftime("%Y-%m-%d %H:%M:%S")
-        em_jornada_serializavel.append(copia)
+    if isinstance(st.session_state.get("em_jornada"), list):
+        for item in st.session_state.em_jornada:
+            if isinstance(item, dict):
+                copia = item.copy()
+                if isinstance(copia.get("DataFim"), datetime):
+                    copia["DataFim"] = copia["DataFim"].strftime("%Y-%m-%d %H:%M:%S")
+                if isinstance(copia.get("DataInicioDT"), datetime):
+                    copia["DataInicioDT"] = copia["DataInicioDT"].strftime("%Y-%m-%d %H:%M:%S")
+                em_jornada_serializavel.append(copia)
         
     dados = {
-        "programados": st.session_state.programados,
+        "programados": st.session_state.get("programados", []),
         "em_jornada": em_jornada_serializavel,
         "encerrados": st.session_state.get("encerrados", [])
     }
@@ -37,30 +39,50 @@ def salvar_dados():
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
 def carregar_dados():
+    st.session_state.programados = []
+    st.session_state.em_jornada = []
+    st.session_state.encerrados = []
+    
     if os.path.exists(ARQUIVO_BANCO):
         try:
             with open(ARQUIVO_BANCO, "r", encoding="utf-8") as f:
                 dados = json.load(f)
-                st.session_state.programados = dados.get("programados", [])
-                st.session_state.encerrados = dados.get("encerrados", [])
                 
-                em_jornada = dados.get("em_jornada", [])
-                for item in em_jornada:
-                    if "DataFim" in item and isinstance(item["DataFim"], str):
-                        item["DataFim"] = datetime.strptime(item["DataFim"], "%Y-%m-%d %H:%M:%S")
-                    if "DataInicioDT" in item and isinstance(item["DataInicioDT"], str):
-                        item["DataInicioDT"] = datetime.strptime(item["DataInicioDT"], "%Y-%m-%d %H:%M:%S")
-                st.session_state.em_jornada = em_jornada
+                if isinstance(dados, dict):
+                    st.session_state.programados = dados.get("programados", []) if isinstance(dados.get("programados"), list) else []
+                    st.session_state.encerrados = dados.get("encerrados", []) if isinstance(dados.get("encerrados"), list) else []
+                    
+                    raw_em_jornada = dados.get("em_jornada", [])
+                    if isinstance(raw_em_jornada, list):
+                        for item in raw_em_jornada:
+                            if isinstance(item, dict):
+                                if "DataFim" in item and isinstance(item["DataFim"], str):
+                                    try:
+                                        item["DataFim"] = datetime.strptime(item["DataFim"], "%Y-%m-%d %H:%M:%S")
+                                    except ValueError:
+                                        pass
+                                if "DataInicioDT" in item and isinstance(item["DataInicioDT"], str):
+                                    try:
+                                        item["DataInicioDT"] = datetime.strptime(item["DataInicioDT"], "%Y-%m-%d %H:%M:%S")
+                                    except ValueError:
+                                        pass
+                                st.session_state.em_jornada.append(item)
         except Exception:
             st.session_state.programados = []
             st.session_state.em_jornada = []
             st.session_state.encerrados = []
 
-# Inicialização
+# Inicialização segura do Session State
 if 'programados' not in st.session_state or 'em_jornada' not in st.session_state:
     carregar_dados()
 
-if 'encerrados' not in st.session_state:
+if not isinstance(st.session_state.em_jornada, list):
+    st.session_state.em_jornada = []
+
+if not isinstance(st.session_state.programados, list):
+    st.session_state.programados = []
+
+if 'encerrados' not in st.session_state or not isinstance(st.session_state.encerrados, list):
     st.session_state.encerrados = []
 
 st.title("🚆 Controle Operacional de Jornada")
@@ -145,11 +167,12 @@ aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação 
 with aba1:
     st.subheader("🟢 Maquinistas em Operação")
     
-    if st.session_state.em_jornada:
+    if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
         
         for idx, m in enumerate(st.session_state.em_jornada):
-            tempo_restante_min = int((m["DataFim"] - agora).total_seconds() / 60)
+            dt_fim = m.get("DataFim", agora)
+            tempo_restante_min = int((dt_fim - agora).total_seconds() / 60)
             
             if tempo_restante_min <= 0:
                 status = "🔴 JORNADA EXCEDIDA"
@@ -165,10 +188,10 @@ with aba1:
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
                 
-            st.markdown(f"### 🚆 {m['Maquinista']} (Matrícula: {m['Matrícula']}) — {status}")
-            st.write(f"**Atividade:** {m['Atividade']} | **Trem/Loco:** {m['Trem']} / {m['Locomotiva']} | **Abertura:** {m['Início']} | **Fim Previsto:** {m['Fim Previsto']} | **Tempo Restante:** {restante_fmt}")
+            st.markdown(f"### 🚆 {m.get('Maquinista', 'N/I')} (Matrícula: {m.get('Matrícula', '-')}) — {status}")
+            st.write(f"**Atividade:** {m.get('Atividade', '-')} | **Trem/Loco:** {m.get('Trem', '-')} / {m.get('Locomotiva', '-')} | **Abertura:** {m.get('Início', '-')} | **Fim Previsto:** {m.get('Fim Previsto', '-')} | **Tempo Restante:** {restante_fmt}")
             
-            with st.expander(f"🛑 Fechar Caderno de {m['Maquinista']}", expanded=False):
+            with st.expander(f"🛑 Fechar Caderno de {m.get('Maquinista', 'Maquinista')}", expanded=False):
                 col_d_fim, col_h_fim, col_btn_fim = st.columns([2, 2, 2])
                 with col_d_fim:
                     dt_enc = st.date_input("Data de Fechamento", value=datetime.now().date(), key=f"dt_enc_{idx}")
@@ -181,7 +204,6 @@ with aba1:
                         fim_real_dt = datetime.combine(dt_enc, hr_enc)
                         inicio_real_dt = m.get("DataInicioDT", datetime.now())
                         
-                        # Cálculo exato da duração
                         duracao_min = int((fim_real_dt - inicio_real_dt).total_seconds() / 60)
                         if duracao_min < 0:
                             duracao_min = 0
@@ -190,18 +212,18 @@ with aba1:
                         duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
                         
                         st.session_state.encerrados.append({
-                            "Maquinista": m["Maquinista"],
-                            "Matrícula": m["Matrícula"],
-                            "Atividade": m["Atividade"],
-                            "Trem/Loco": f"{m['Trem']} / {m['Locomotiva']}",
-                            "Abertura": m["Início"],
+                            "Maquinista": m.get("Maquinista", "-"),
+                            "Matrícula": m.get("Matrícula", "-"),
+                            "Atividade": m.get("Atividade", "-"),
+                            "Trem/Loco": f"{m.get('Trem', '-')} / {m.get('Locomotiva', '-')}",
+                            "Abertura": m.get("Início", "-"),
                             "Fechamento": fim_real_dt.strftime("%d/%m %H:%M"),
                             "Tempo de Caderno Aberto": duracao_formatada
                         })
                         
                         st.session_state.em_jornada.pop(idx)
                         salvar_dados()
-                        st.success(f"Caderno de {m['Maquinista']} encerrado com duração de {duracao_formatada}!")
+                        st.success(f"Caderno encerrado com duração de {duracao_formatada}!")
                         st.rerun()
             st.divider()
             
@@ -216,18 +238,18 @@ with aba2:
     with col_titulo:
         st.subheader("📋 Lista da Escala do Dia")
     with col_limpar:
-        if st.session_state.programados:
+        if len(st.session_state.programados) > 0:
             if st.button("🗑️ Limpar Escala"):
                 st.session_state.programados = []
                 salvar_dados()
                 st.rerun()
     
-    if st.session_state.programados:
+    if len(st.session_state.programados) > 0:
         for idx, item in enumerate(st.session_state.programados):
-            st.markdown(f"### 🚆 {item['Maquinista']} (Matrícula: {item['Matrícula']})")
-            st.write(f"**Atividade:** {item['Atividade']} | **Trem/Loco:** {item['Trem']} / {item['Locomotiva']} | **Trecho:** {item['Trecho']}")
+            st.markdown(f"### 🚆 {item.get('Maquinista', 'N/I')} (Matrícula: {item.get('Matrícula', '-')})")
+            st.write(f"**Atividade:** {item.get('Atividade', '-')} | **Trem/Loco:** {item.get('Trem', '-')} / {item.get('Locomotiva', '-')} | **Trecho:** {item.get('Trecho', '-')}")
             
-            with st.expander(f"▶️ Abrir Caderno para {item['Maquinista']}", expanded=False):
+            with st.expander(f"▶️ Abrir Caderno para {item.get('Maquinista', 'Maquinista')}", expanded=False):
                 col_data, col_hora, col_btn = st.columns([2, 2, 2])
                 
                 with col_data:
@@ -239,15 +261,15 @@ with aba2:
                     st.write("")
                     if st.button("✅ Confirmar Start", key=f"btn_confirm_{idx}"):
                         inicio_dt = datetime.combine(data_inicio, hora_inicio)
-                        duracao_horas = DURACAO_ATIVIDADE.get(item['Atividade'], 8)
+                        duracao_horas = DURACAO_ATIVIDADE.get(item.get('Atividade'), 8)
                         fim_dt = inicio_dt + timedelta(hours=duracao_horas)
                         
                         st.session_state.em_jornada.append({
-                            "Maquinista": item["Maquinista"],
-                            "Matrícula": item["Matrícula"],
-                            "Atividade": item["Atividade"],
-                            "Trem": item["Trem"],
-                            "Locomotiva": item["Locomotiva"],
+                            "Maquinista": item.get("Maquinista", "-"),
+                            "Matrícula": item.get("Matrícula", "-"),
+                            "Atividade": item.get("Atividade", "Viagem"),
+                            "Trem": item.get("Trem", "-"),
+                            "Locomotiva": item.get("Locomotiva", "-"),
                             "Início": inicio_dt.strftime("%d/%m %H:%M"),
                             "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
                             "DataFim": fim_dt,
@@ -256,7 +278,7 @@ with aba2:
                         
                         st.session_state.programados.pop(idx)
                         salvar_dados()
-                        st.success(f"Caderno de {item['Maquinista']} aberto às {inicio_dt.strftime('%H:%M')}!")
+                        st.success(f"Caderno aberto para {inicio_dt.strftime('%d/%m às %H:%M')}!")
                         st.rerun()
             st.divider()
     else:
@@ -266,15 +288,14 @@ with aba2:
 with aba3:
     st.subheader("📊 Histórico de Jornadas Concluídas")
     
-    if st.session_state.encerrados:
+    if len(st.session_state.encerrados) > 0:
         df_enc = pd.DataFrame(st.session_state.encerrados)
         st.dataframe(df_enc, use_container_width=True)
         
-        col_exp, col_del = st.columns([2, 1])
-        with col_del:
-            if st.button("🗑️ Limpar Histórico"):
-                st.session_state.encerrados = []
-                salvar_dados()
-                st.rerun()
+        if st.button("🗑️ Limpar Histórico"):
+            st.session_state.encerrados = []
+            salvar_dados()
+            st.rerun()
     else:
         st.info("Nenhum caderno foi encerrado até o momento.")
+
