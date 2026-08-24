@@ -162,7 +162,7 @@ st.sidebar.markdown("---")
 # --- NAVEGAÇÃO POR ABAS ---
 aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)", "📊 Histórico e Performance"])
 
-# --- ABA 1: EM OPERAÇÃO (PLANILHA NATIVA COM CHECKBOX NA ÚLTIMA COLUNA) ---
+# --- ABA 1: EM OPERAÇÃO ---
 with aba1:
     st.subheader("🟢 Maquinistas em Operação")
     
@@ -201,9 +201,8 @@ with aba1:
             
         df_operacao = pd.DataFrame(dados_tabela)
         
-        st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** na linha correspondente para fechar o caderno do maquinista.")
+        st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** para ajustar o horário final e fechar o caderno.")
         
-        # Exibe a planilha interativa fixa sem quebrar a tela do celular
         edited_df = st.data_editor(
             df_operacao,
             use_container_width=True,
@@ -212,43 +211,56 @@ with aba1:
             key="editor_operacao"
         )
         
-        # Verifica qual caixa de seleção foi marcada
+        # Identifica se alguma linha foi selecionada para encerramento
         linhas_encerradas = edited_df[edited_df["Encerrar Caderno?"] == True]
         
         if not linhas_encerradas.empty:
-            for index, row in linhas_encerradas.iterrows():
-                m_target = st.session_state.em_jornada[index]
-                fim_real_dt = datetime.now()
-                inicio_real_dt = m_target.get("DataInicioDT", datetime.now())
+            idx_selecionado = linhas_encerradas.index[0]
+            m_target = st.session_state.em_jornada[idx_selecionado]
+            
+            st.warning(f"🛑 **Ajuste de Encerramento do Caderno:** {m_target.get('Maquinista')}")
+            
+            col_d, col_h, col_btn = st.columns([1.5, 1.5, 1.5])
+            with col_d:
+                data_fechamento = st.date_input("Data de Fechamento", value=datetime.now().date(), key="dt_fechar")
+            with col_h:
+                hora_fechamento = st.time_input("Hora de Fechamento", value=datetime.now().time(), key="hr_fechar")
                 
-                duracao_min = int((fim_real_dt - inicio_real_dt).total_seconds() / 60)
-                if duracao_min < 0:
-                    duracao_min = 0
-                dur_horas = duracao_min // 60
-                dur_mins = duracao_min % 60
-                duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
-                
-                st.session_state.encerrados.append({
-                    "Maquinista": m_target.get("Maquinista", "-"),
-                    "Matrícula": m_target.get("Matrícula", "-"),
-                    "Atividade": m_target.get("Atividade", "-"),
-                    "Trem/Loco": f"{m_target.get('Trem', '-')} / {m_target.get('Locomotiva', '-')}",
-                    "Abertura": m_target.get("Início", "-"),
-                    "Fechamento": fim_real_dt.strftime("%d/%m %H:%M"),
-                    "Tempo de Caderno Aberto": duracao_formatada
-                })
-                
-                st.session_state.em_jornada.pop(index)
-                salvar_dados()
-                st.success(f"Caderno de {m_target.get('Maquinista')} encerrado!")
-                st.rerun()
+            with col_btn:
+                st.write("") # Espaçamento vertical
+                st.write("")
+                if st.button("Confirmar Fechamento Manual", type="primary"):
+                    fim_real_dt = datetime.combine(data_fechamento, hora_fechamento)
+                    inicio_real_dt = m_target.get("DataInicioDT", datetime.now())
+                    
+                    duracao_min = int((fim_real_dt - inicio_real_dt).total_seconds() / 60)
+                    if duracao_min < 0:
+                        duracao_min = 0
+                    dur_horas = duracao_min // 60
+                    dur_mins = duracao_min % 60
+                    duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
+                    
+                    st.session_state.encerrados.append({
+                        "Maquinista": m_target.get("Maquinista", "-"),
+                        "Matrícula": m_target.get("Matrícula", "-"),
+                        "Atividade": m_target.get("Atividade", "-"),
+                        "Trem/Loco": f"{m_target.get('Trem', '-')} / {m_target.get('Locomotiva', '-')}",
+                        "Abertura": m_target.get("Início", "-"),
+                        "Fechamento": fim_real_dt.strftime("%d/%m %H:%M"),
+                        "Tempo de Caderno Aberto": duracao_formatada
+                    })
+                    
+                    st.session_state.em_jornada.pop(idx_selecionado)
+                    salvar_dados()
+                    st.success(f"Caderno de {m_target.get('Maquinista')} encerrado com sucesso!")
+                    st.rerun()
 
         if st.button("🔄 Atualizar Tempos"):
             st.rerun()
     else:
         st.info("Nenhum caderno aberto no momento. Dê o START na aba de 'Programação'.")
 
-# --- ABA 2: PROGRAMAÇÃO (COM CHECKBOX PARA DAR START) ---
+# --- ABA 2: PROGRAMAÇÃO ---
 with aba2:
     col_titulo, col_limpar = st.columns([3, 1])
     with col_titulo:
