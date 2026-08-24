@@ -128,34 +128,36 @@ if arquivo_enviado is not None:
 
 st.sidebar.markdown("---")
 
-# --- 2. LANÇAMENTO MANUAL ---
+# --- 2. LANÇAMENTO MANUAL EXPANSÍVEL ---
 st.sidebar.subheader("✍️ Lançamento Manual")
-with st.sidebar.form("form_manual", clear_on_submit=True):
-    m_nome = st.text_input("Nome do Maquinista")
-    m_mat = st.text_input("Matrícula")
-    m_ativ = st.selectbox("Atividade", list(DURACAO_ATIVIDADE.keys()))
-    m_trem = st.text_input("Trem / Prefixo")
-    m_loco = st.text_input("Locomotiva")
-    m_orig = st.text_input("Origem")
-    m_dest = st.text_input("Destino")
-    
-    btn_manual = st.form_submit_button("➕ Adicionar à Escala")
-    
-    if btn_manual:
-        if m_nome.strip() != "":
-            st.session_state.programados.append({
-                "Matrícula": m_mat if m_mat else "-",
-                "Maquinista": m_nome,
-                "Atividade": m_ativ,
-                "Trem": m_trem if m_trem else "-",
-                "Locomotiva": m_loco if m_loco else "-",
-                "Trecho": f"{m_orig if m_orig else '-'} ➔ {m_dest if m_dest else '-'}"
-            })
-            salvar_dados()
-            st.sidebar.success(f"✅ {m_nome} adicionado com sucesso!")
-            st.rerun()
-        else:
-            st.sidebar.warning("Por favor, digite o nome do maquinista.")
+
+with st.sidebar.expander("➕ Inserir Manualmente"):
+    with st.form("form_manual", clear_on_submit=True):
+        m_nome = st.text_input("Nome do Maquinista")
+        m_mat = st.text_input("Matrícula")
+        m_ativ = st.selectbox("Atividade", list(DURACAO_ATIVIDADE.keys()))
+        m_trem = st.text_input("Trem / Prefixo")
+        m_loco = st.text_input("Locomotiva")
+        m_orig = st.text_input("Origem")
+        m_dest = st.text_input("Destino")
+        
+        btn_manual = st.form_submit_button(" Confirmar Lançamento")
+        
+        if btn_manual:
+            if m_nome.strip() != "":
+                st.session_state.programados.append({
+                    "Matrícula": m_mat if m_mat else "-",
+                    "Maquinista": m_nome,
+                    "Atividade": m_ativ,
+                    "Trem": m_trem if m_trem else "-",
+                    "Locomotiva": m_loco if m_loco else "-",
+                    "Trecho": f"{m_orig if m_orig else '-'} ➔ {m_dest if m_dest else '-'}"
+                })
+                salvar_dados()
+                st.sidebar.success(f"✅ {m_nome} adicionado com sucesso!")
+                st.rerun()
+            else:
+                st.sidebar.warning("Por favor, digite o nome do maquinista.")
 
 st.sidebar.markdown("---")
 
@@ -211,7 +213,6 @@ with aba1:
             key="editor_operacao"
         )
         
-        # Identifica se alguma linha foi selecionada para encerramento
         linhas_encerradas = edited_df[edited_df["Encerrar Caderno?"] == True]
         
         if not linhas_encerradas.empty:
@@ -227,7 +228,7 @@ with aba1:
                 hora_fechamento = st.time_input("Hora de Fechamento", value=datetime.now().time(), key="hr_fechar")
                 
             with col_btn:
-                st.write("") # Espaçamento vertical
+                st.write("")
                 st.write("")
                 if st.button("Confirmar Fechamento Manual", type="primary"):
                     fim_real_dt = datetime.combine(data_fechamento, hora_fechamento)
