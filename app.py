@@ -7,9 +7,38 @@ import io
 
 st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="wide", page_icon="🚆")
 
+# --- ESTILIZAÇÃO CSS CORPORATIVA (CARDS E TIPOGRAFIA) ---
+st.markdown("""
+    <style>
+    /* Estilização dos Cards KPI */
+    .kpi-card {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 12px 16px;
+        border-left: 5px solid #6c757d;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 10px;
+    }
+    .kpi-normal { border-left-color: #28a745 !important; }
+    .kpi-atencao { border-left-color: #ffc107 !important; }
+    .kpi-critico { border-left-color: #dc3545 !important; }
+    
+    .kpi-title {
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+    .kpi-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 ARQUIVO_BANCO = "dados_jornada.json"
 
-# Regras Operacionais e Regulamentares (Horas)
 DURACAO_ATIVIDADE = {
     "Viagem": 10,
     "Manobra": 6,
@@ -18,9 +47,8 @@ DURACAO_ATIVIDADE = {
     "Outra Atividade": 8
 }
 
-HORAS_DESCANSO_REGULAMENTAR = 11  # Interjornada legal
+HORAS_DESCANSO_REGULAMENTAR = 11
 
-# --- FUNÇÕES PARA SALVAR, CARREGAR E EXPORTAR DADOS ---
 def salvar_dados():
     em_jornada_serializavel = []
     if isinstance(st.session_state.get("em_jornada"), list):
@@ -82,14 +110,12 @@ def gerar_excel(df):
     return output.getvalue()
 
 def verificar_descanso(matricula, dt_inicio_pretendida):
-    """Verifica se o maquinista cumpriu o descanso legal desde o último encerramento"""
     for enc in reversed(st.session_state.get("encerrados", [])):
         if str(enc.get("Matrícula")) == str(matricula):
             dt_apto_str = enc.get("Apto em", "")
             if dt_apto_str:
                 try:
                     dt_apto = datetime.strptime(dt_apto_str, "%d/%m %H:%M")
-                    # Ajusta ano atual
                     dt_apto = dt_apto.replace(year=dt_inicio_pretendida.year)
                     if dt_inicio_pretendida < dt_apto:
                         return False, dt_apto_str
@@ -114,7 +140,7 @@ st.title("🚆 Controle Operacional de Jornada")
 
 st.sidebar.header("⚙️ Opções e Carga")
 
-# --- 1. IMPORTAÇÃO DA PLANILHA ---
+# --- IMPORTAÇÃO ---
 st.sidebar.subheader("📂 Programação Diária (.xlsx / .csv)")
 arquivo_enviado = st.sidebar.file_uploader("Carregar Escala do Dia", type=["xlsx", "csv"])
 
@@ -154,7 +180,7 @@ if arquivo_enviado is not None:
 
 st.sidebar.markdown("---")
 
-# --- 2. LANÇAMENTO MANUAL EXPANSÍVEL ---
+# --- LANÇAMENTO MANUAL ---
 st.sidebar.subheader("✍️ Lançamento Manual")
 
 with st.sidebar.expander("➕ Inserir Manualmente"):
@@ -187,10 +213,10 @@ with st.sidebar.expander("➕ Inserir Manualmente"):
 
 st.sidebar.markdown("---")
 
-# --- NAVEGAÇÃO POR ABAS ---
+# --- ABAS ---
 aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)", "📊 Histórico e Performance"])
 
-# --- ABA 1: EM OPERAÇÃO ---
+# --- ABA 1: OPERAÇÃO ---
 with aba1:
     st.subheader("🟢 Maquinistas em Operação")
     
@@ -205,7 +231,6 @@ with aba1:
             dt_fim = m.get("DataFim", agora)
             tempo_restante_min = int((dt_fim - agora).total_seconds() / 60)
             
-            # Regras de Alerta Visual Avançado
             if tempo_restante_min <= 0:
                 status = "🔴 EXCEDIDO"
                 restante_fmt = "00h 00m"
@@ -244,18 +269,44 @@ with aba1:
             texto_whatsapp_op += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
             texto_whatsapp_op += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
 
-        # --- CARDS KPI OPERACIONAIS ---
+        # --- NOVO PAINEL COMPACTO DE CARDS KPI (VISUAL PROFISSIONAL) ---
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Total em Operação", c_total)
-        k2.metric("🟢 Em Ritmo Normal", c_normal)
-        k3.metric("⚠️ Em Atenção / Risco", c_atencao)
-        k4.metric("🔴 Excedidos", c_critico)
-        st.markdown("---")
+        
+        with k1:
+            st.markdown(f'''
+                <div class="kpi-card">
+                    <div class="kpi-title">Total em Operação</div>
+                    <div class="kpi-value">{c_total}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+        with k2:
+            st.markdown(f'''
+                <div class="kpi-card kpi-normal">
+                    <div class="kpi-title">🟢 Em Ritmo Normal</div>
+                    <div class="kpi-value">{c_normal}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+        with k3:
+            st.markdown(f'''
+                <div class="kpi-card kpi-atencao">
+                    <div class="kpi-title">⚠️ Em Atenção / Risco</div>
+                    <div class="kpi-value">{c_atencao}</div>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+        with k4:
+            st.markdown(f'''
+                <div class="kpi-card kpi-critico">
+                    <div class="kpi-title">🔴 Excedidos</div>
+                    <div class="kpi-value">{c_critico}</div>
+                </div>
+            ''', unsafe_allow_html=True)
             
         df_operacao = pd.DataFrame(dados_tabela)
 
-        # Campo de busca rápida
-        busca_op = st.text_input("🔍 Filtrar Operação (Nome, Matrícula ou Trem):", "")
+        busca_op = st.text_input("🔍 Filtrar Operação (Nome, Matrícula ou Trem):", "", placeholder="Digite para buscar...")
         if busca_op:
             df_operacao = df_operacao[
                 df_operacao['Maquinista'].str.contains(busca_op, case=False, na=False) |
@@ -263,8 +314,6 @@ with aba1:
                 df_operacao['Trem / Loco'].str.contains(busca_op, case=False, na=False)
             ]
 
-        st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** para ajustar o horário final e fechar o caderno.")
-        
         edited_df = st.data_editor(
             df_operacao,
             use_container_width=True,
@@ -273,7 +322,6 @@ with aba1:
             key="editor_operacao"
         )
 
-        # --- BOTÕES DE AÇÃO ABAIXO DA TABELA ---
         col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
         
         with col_btn1:
@@ -296,7 +344,6 @@ with aba1:
                 st.markdown("**Copie o texto abaixo para enviar:**")
                 st.code(texto_whatsapp_op, language="text")
 
-        # --- SEÇÃO DE FECHAMENTO (APARECE APENAS AO MARCAR A CAIXINHA) ---
         linhas_encerradas = edited_df[edited_df["Encerrar Caderno?"] == True]
         
         if not linhas_encerradas.empty:
@@ -326,7 +373,6 @@ with aba1:
                     dur_mins = duracao_min % 60
                     duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
                     
-                    # Cálculo de Apto para Próximo Chamado (Interjornada de 11h)
                     dt_apto_proxima = fim_real_dt + timedelta(hours=HORAS_DESCANSO_REGULAMENTAR)
                     
                     st.session_state.encerrados.append({
@@ -342,7 +388,7 @@ with aba1:
                     
                     st.session_state.em_jornada.pop(idx_selecionado)
                     salvar_dados()
-                    st.success(f"Caderno de {m_target.get('Maquinista')} encerrado! Apto para novo chamado a partir de: {dt_apto_proxima.strftime('%d/%m %H:%M')}")
+                    st.success(f"Caderno de {m_target.get('Maquinista')} encerrado! Apto em: {dt_apto_proxima.strftime('%d/%m %H:%M')}")
                     st.rerun()
 
     else:
@@ -373,8 +419,6 @@ with aba2:
             
         df_prog = pd.DataFrame(dados_prog)
         
-        st.caption("💡 Marque a caixinha **'Dar Start?'** para ajustar a data/hora de abertura e iniciar o caderno.")
-        
         edited_prog = st.data_editor(
             df_prog,
             use_container_width=True,
@@ -383,7 +427,6 @@ with aba2:
             key="editor_programados"
         )
         
-        # --- BOTÕES DE AÇÃO ABAIXO DA TABELA DE PROGRAMAÇÃO ---
         col_p1, col_p2, col_p3 = st.columns([1, 1, 1])
         
         with col_p1:
@@ -407,7 +450,6 @@ with aba2:
                 salvar_dados()
                 st.rerun()
 
-        # --- SEÇÃO DE START MANUAL COM VALIDAÇÃO DE DESCANSO LEGAL ---
         linhas_start = edited_prog[edited_prog["Dar Start?"] == True]
         
         if not linhas_start.empty:
@@ -428,8 +470,6 @@ with aba2:
                 st.write("")
                 if st.button("Confirmar Start Manual", type="primary"):
                     inicio_dt = datetime.combine(data_inicio, hora_inicio)
-                    
-                    # Validação de Interjornada / Descanso Obrigatório
                     apto, dt_apto_str = verificar_descanso(item_start.get("Matrícula"), inicio_dt)
                     
                     if not apto:
@@ -457,7 +497,7 @@ with aba2:
     else:
         st.info("Nenhuma programação carregada. Faça o upload da planilha ou lance manualmente no menu lateral.")
 
-# --- ABA 3: HISTÓRICO E PERFORMANCE ---
+# --- ABA 3: HISTÓRICO ---
 with aba3:
     st.subheader("📊 Histórico e Gestão de Interjornada")
     
