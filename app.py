@@ -9,7 +9,7 @@ st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="w
 
 ARQUIVO_BANCO = "dados_jornada.json"
 
-# Mapeamento padrão de horas por atividade
+# Regras Operacionais e Regulamentares (Horas)
 DURACAO_ATIVIDADE = {
     "Viagem": 10,
     "Manobra": 6,
@@ -17,6 +17,8 @@ DURACAO_ATIVIDADE = {
     "Manutenção": 8,
     "Outra Atividade": 8
 }
+
+HORAS_DESCANSO_REGULAMENTAR = 11  # Interjornada legal
 
 # --- FUNÇÕES PARA SALVAR, CARREGAR E EXPORTAR DADOS ---
 def salvar_dados():
@@ -78,6 +80,23 @@ def gerar_excel(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Jornadas')
     return output.getvalue()
+
+def verificar_descanso(matricula, dt_inicio_pretendida):
+    """Verifica se o maquinista cumpriu o descanso legal desde o último encerramento"""
+    for enc in reversed(st.session_state.get("encerrados", [])):
+        if str(enc.get("Matrícula")) == str(matricula):
+            dt_apto_str = enc.get("Apto em", "")
+            if dt_apto_str:
+                try:
+                    dt_apto = datetime.strptime(dt_apto_str, "%d/%m %H:%M")
+                    # Ajusta ano atual
+                    dt_apto = dt_apto.replace(year=dt_inicio_pretendida.year)
+                    if dt_inicio_pretendida < dt_apto:
+                        return False, dt_apto_str
+                except ValueError:
+                    pass
+            break
+    return True, ""
 
 if 'programados' not in st.session_state or 'em_jornada' not in st.session_state:
     carregar_dados()
@@ -180,23 +199,35 @@ with aba1:
         dados_tabela = []
         texto_whatsapp_op = f"*📋 RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
         
+        c_normal, c_atencao, c_critico, c_total = 0, 0, 0, len(st.session_state.em_jornada)
+        
         for idx, m in enumerate(st.session_state.em_jornada):
             dt_fim = m.get("DataFim", agora)
             tempo_restante_min = int((dt_fim - agora).total_seconds() / 60)
             
+            # Regras de Alerta Visual Avançado
             if tempo_restante_min <= 0:
                 status = "🔴 EXCEDIDO"
                 restante_fmt = "00h 00m"
-            elif tempo_restante_min <= 60:
-                status = "⚠️ ATENÇÃO"
+                c_critico += 1
+            elif tempo_restante_min <= 45:
+                status = "🔴 RISCO ALTO (<45m)"
                 horas = tempo_restante_min // 60
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
+                c_atencao += 1
+            elif tempo_restante_min <= 90:
+                status = "⚠️ ATENÇÃO (<90m)"
+                horas = tempo_restante_min // 60
+                minutos = tempo_restante_min % 60
+                restante_fmt = f"{horas:02d}h {minutos:02d}m"
+                c_atencao += 1
             else:
                 status = "🟢 NORMAL"
                 horas = tempo_restante_min // 60
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
+                c_normal += 1
                 
             dados_tabela.append({
                 "Status": status,
@@ -212,8 +243,25 @@ with aba1:
             texto_whatsapp_op += f"👤 *{m.get('Maquinista')}* (Mat: {m.get('Matrícula')})\n"
             texto_whatsapp_op += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
             texto_whatsapp_op += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
+
+        # --- CARDS KPI OPERACIONAIS ---
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total em Operação", c_total)
+        k2.metric("🟢 Em Ritmo Normal", c_normal)
+        k3.metric("⚠️ Em Atenção / Risco", c_atencao)
+        k4.metric("🔴 Excedidos", c_critico)
+        st.markdown("---")
             
         df_operacao = pd.DataFrame(dados_tabela)
+
+        # Campo de busca rápida
+        busca_op = st.text_input("🔍 Filtrar Operação (Nome, Matrícula ou Trem):", "")
+        if busca_op:
+            df_operacao = df_operacao[
+                df_operacao['Maquinista'].str.contains(busca_op, case=False, na=False) |
+                df_operacao['Matrícula'].str.contains(busca_op, case=False, na=False) |
+                df_operacao['Trem / Loco'].str.contains(busca_op, case=False, na=False)
+            ]
 
         st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** para ajustar o horário final e fechar o caderno.")
         
@@ -278,6 +326,9 @@ with aba1:
                     dur_mins = duracao_min % 60
                     duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
                     
+                    # Cálculo de Apto para Próximo Chamado (Interjornada de 11h)
+                    dt_apto_proxima = fim_real_dt + timedelta(hours=HORAS_DESCANSO_REGULAMENTAR)
+                    
                     st.session_state.encerrados.append({
                         "Maquinista": m_target.get("Maquinista", "-"),
                         "Matrícula": m_target.get("Matrícula", "-"),
@@ -285,12 +336,13 @@ with aba1:
                         "Trem/Loco": f"{m_target.get('Trem', '-')} / {m_target.get('Locomotiva', '-')}",
                         "Abertura": m_target.get("Início", "-"),
                         "Fechamento": fim_real_dt.strftime("%d/%m %H:%M"),
-                        "Tempo de Caderno Aberto": duracao_formatada
+                        "Tempo Aberto": duracao_formatada,
+                        "Apto em": dt_apto_proxima.strftime("%d/%m %H:%M")
                     })
                     
                     st.session_state.em_jornada.pop(idx_selecionado)
                     salvar_dados()
-                    st.success(f"Caderno de {m_target.get('Maquinista')} encerrado com sucesso!")
+                    st.success(f"Caderno de {m_target.get('Maquinista')} encerrado! Apto para novo chamado a partir de: {dt_apto_proxima.strftime('%d/%m %H:%M')}")
                     st.rerun()
 
     else:
@@ -355,7 +407,7 @@ with aba2:
                 salvar_dados()
                 st.rerun()
 
-        # --- SEÇÃO DE START MANUAL (APARECE AO MARCAR A CAIXINHA) ---
+        # --- SEÇÃO DE START MANUAL COM VALIDAÇÃO DE DESCANSO LEGAL ---
         linhas_start = edited_prog[edited_prog["Dar Start?"] == True]
         
         if not linhas_start.empty:
@@ -376,31 +428,38 @@ with aba2:
                 st.write("")
                 if st.button("Confirmar Start Manual", type="primary"):
                     inicio_dt = datetime.combine(data_inicio, hora_inicio)
-                    duracao_horas = DURACAO_ATIVIDADE.get(item_start.get('Atividade'), 8)
-                    fim_dt = inicio_dt + timedelta(hours=duracao_horas)
                     
-                    st.session_state.em_jornada.append({
-                        "Maquinista": item_start.get("Maquinista", "-"),
-                        "Matrícula": item_start.get("Matrícula", "-"),
-                        "Atividade": item_start.get("Atividade", "Viagem"),
-                        "Trem": item_start.get("Trem", "-"),
-                        "Locomotiva": item_start.get("Locomotiva", "-"),
-                        "Início": inicio_dt.strftime("%d/%m %H:%M"),
-                        "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
-                        "DataFim": fim_dt,
-                        "DataInicioDT": inicio_dt
-                    })
+                    # Validação de Interjornada / Descanso Obrigatório
+                    apto, dt_apto_str = verificar_descanso(item_start.get("Matrícula"), inicio_dt)
                     
-                    st.session_state.programados.pop(idx_start_sel)
-                    salvar_dados()
-                    st.success(f"Caderno de {item_start.get('Maquinista')} aberto com sucesso!")
-                    st.rerun()
+                    if not apto:
+                        st.error(f"🛑 **BLOQUEIO DE SEGURANÇA:** O maquinista {item_start.get('Maquinista')} está em período de descanso regulamentar! Estará apto apenas em: **{dt_apto_str}**.")
+                    else:
+                        duracao_horas = DURACAO_ATIVIDADE.get(item_start.get('Atividade'), 8)
+                        fim_dt = inicio_dt + timedelta(hours=duracao_horas)
+                        
+                        st.session_state.em_jornada.append({
+                            "Maquinista": item_start.get("Maquinista", "-"),
+                            "Matrícula": item_start.get("Matrícula", "-"),
+                            "Atividade": item_start.get("Atividade", "Viagem"),
+                            "Trem": item_start.get("Trem", "-"),
+                            "Locomotiva": item_start.get("Locomotiva", "-"),
+                            "Início": inicio_dt.strftime("%d/%m %H:%M"),
+                            "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
+                            "DataFim": fim_dt,
+                            "DataInicioDT": inicio_dt
+                        })
+                        
+                        st.session_state.programados.pop(idx_start_sel)
+                        salvar_dados()
+                        st.success(f"Caderno de {item_start.get('Maquinista')} aberto com sucesso!")
+                        st.rerun()
     else:
         st.info("Nenhuma programação carregada. Faça o upload da planilha ou lance manualmente no menu lateral.")
 
-# --- ABA 3: HISTÓRICO ---
+# --- ABA 3: HISTÓRICO E PERFORMANCE ---
 with aba3:
-    st.subheader("📊 Histórico de Jornadas Concluídas")
+    st.subheader("📊 Histórico e Gestão de Interjornada")
     
     if len(st.session_state.encerrados) > 0:
         df_enc = pd.DataFrame(st.session_state.encerrados)
