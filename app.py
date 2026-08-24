@@ -9,15 +9,17 @@ st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="w
 
 ARQUIVO_BANCO = "dados_jornada.json"
 
+# --- REGRAS DE TEMPO MRS (CLT CATEGORIA C / FERROVIÁRIOS) ---
 DURACAO_ATIVIDADE = {
-    "Viagem": 10,
-    "Manobra": 6,
+    "Viagem": 12,       # Limite máximo de permanência/jornada em trecho
+    "Manobra": 8,       # Turno padrão de pátio/terminal
     "Auxílio": 8,
     "Manutenção": 8,
     "Outra Atividade": 8
 }
 
-HORAS_DESCANSO_REGULAMENTAR = 11
+# Repouso mínimo obrigatório entre jornadas (CLT Art. 239, § 3º)
+HORAS_DESCANSO_REGULAMENTAR = 10  
 
 def salvar_dados():
     em_jornada_serializavel = []
@@ -106,7 +108,7 @@ if not isinstance(st.session_state.programados, list):
 if 'encerrados' not in st.session_state or not isinstance(st.session_state.encerrados, list):
     st.session_state.encerrados = []
 
-st.title("🚆 Controle Operacional de Jornada")
+st.title("🚆 Controle Operacional de Jornada - MRS")
 
 st.sidebar.header("⚙️ Opções e Carga")
 
@@ -205,14 +207,14 @@ with aba1:
                 status = "🔴 EXCEDIDO"
                 restante_fmt = "00h 00m"
                 c_critico += 1
-            elif tempo_restante_min <= 45:
-                status = "🔴 RISCO ALTO (<45m)"
+            elif tempo_restante_min <= 60:
+                status = "🔴 RISCO ALTO (<60m)"
                 horas = tempo_restante_min // 60
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
-                c_critico += 1  # CORRIGIDO: Agora conta como RISCO no resumo!
-            elif tempo_restante_min <= 90:
-                status = "⚠️ ATENÇÃO (<90m)"
+                c_critico += 1
+            elif tempo_restante_min <= 120:
+                status = "⚠️ ATENÇÃO (<2h)"
                 horas = tempo_restante_min // 60
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
@@ -440,7 +442,7 @@ with aba2:
                     apto, dt_apto_str = verificar_descanso(item_start.get("Matrícula"), inicio_dt)
                     
                     if not apto:
-                        st.error(f"🛑 **BLOQUEIO DE SEGURANÇA:** O maquinista {item_start.get('Maquinista')} está em período de descanso regulamentar! Estará apto apenas em: **{dt_apto_str}**.")
+                        st.error(f"🛑 **BLOQUEIO DE SEGURANÇA (INTERJORNADA):** O maquinista {item_start.get('Maquinista')} está cumprindo o repouso obrigatório de 10h! Estará apto apenas em: **{dt_apto_str}**.")
                     else:
                         duracao_horas = DURACAO_ATIVIDADE.get(item_start.get('Atividade'), 8)
                         fim_dt = inicio_dt + timedelta(hours=duracao_horas)
