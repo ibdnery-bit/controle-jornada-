@@ -210,7 +210,7 @@ with aba1:
                 horas = tempo_restante_min // 60
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
-                c_atencao += 1
+                c_critico += 1  # CORRIGIDO: Agora conta como RISCO no resumo!
             elif tempo_restante_min <= 90:
                 status = "⚠️ ATENÇÃO (<90m)"
                 horas = tempo_restante_min // 60
