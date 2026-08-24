@@ -29,7 +29,6 @@ st.sidebar.subheader("📂 Programação Diária (.xlsx / .csv)")
 arquivo_enviado = st.sidebar.file_uploader("Carregar Escala do Dia", type=["xlsx", "csv"])
 
 if arquivo_enviado is not None:
-    # Processa automaticamente assim que o arquivo é enviado
     if 'ultimo_arquivo' not in st.session_state or st.session_state.ultimo_arquivo != arquivo_enviado.name:
         try:
             if arquivo_enviado.name.endswith('.csv'):
@@ -122,31 +121,40 @@ with aba2:
     
     if st.session_state.programados:
         for idx, item in enumerate(st.session_state.programados):
-            col_info, col_acao = st.columns([4, 1])
+            st.markdown(f"### 🚆 {item['Maquinista']} (Matrícula: {item['Matrícula']})")
+            st.write(f"**Atividade:** {item['Atividade']} | **Trem/Loco:** {item['Trem']} / {item['Locomotiva']} | **Trecho:** {item['Trecho']}")
             
-            with col_info:
-                st.write(f"**{item['Maquinista']}** (Matrícula: {item['Matrícula']}) | **Atividade:** {item['Atividade']} | **Trem/Loco:** {item['Trem']} / {item['Locomotiva']} | **Trecho:** {item['Trecho']}")
+            # Formulario individual de Start com Data e Hora ajustaveis
+            with st.expander(f"▶️ Abrir Caderno para {item['Maquinista']}", expanded=False):
+                col_data, col_hora, col_btn = st.columns([2, 2, 2])
                 
-            with col_acao:
-                if st.button(f"▶️ Abrir Caderno", key=f"start_{idx}"):
-                    agora = datetime.now()
-                    duracao_horas = DURACAO_ATIVIDADE.get(item['Atividade'], 8)
-                    fim = agora + timedelta(hours=duracao_horas)
-                    
-                    st.session_state.em_jornada.append({
-                        "Maquinista": item["Maquinista"],
-                        "Matrícula": item["Matrícula"],
-                        "Atividade": item["Atividade"],
-                        "Trem": item["Trem"],
-                        "Locomotiva": item["Locomotiva"],
-                        "Início": agora.strftime("%H:%M"),
-                        "Fim Previsto": fim.strftime("%H:%M"),
-                        "DataFim": fim
-                    })
-                    
-                    st.session_state.programados.pop(idx)
-                    st.success(f"Caderno de {item['Maquinista']} aberto às {agora.strftime('%H:%M')}!")
-                    st.rerun()
+                with col_data:
+                    data_inicio = st.date_input("Data de Início", value=datetime.now().date(), key=f"dt_{idx}")
+                with col_hora:
+                    hora_inicio = st.time_input("Horário de Início", value=datetime.now().time(), key=f"hr_{idx}")
+                with col_btn:
+                    st.write("") # Espaçamento vertical
+                    st.write("")
+                    if st.button("✅ Confirmar Start", key=f"btn_confirm_{idx}"):
+                        inicio_dt = datetime.combine(data_inicio, hora_inicio)
+                        duracao_horas = DURACAO_ATIVIDADE.get(item['Atividade'], 8)
+                        fim_dt = inicio_dt + timedelta(hours=duracao_horas)
+                        
+                        st.session_state.em_jornada.append({
+                            "Maquinista": item["Maquinista"],
+                            "Matrícula": item["Matrícula"],
+                            "Atividade": item["Atividade"],
+                            "Trem": item["Trem"],
+                            "Locomotiva": item["Locomotiva"],
+                            "Início": inicio_dt.strftime("%d/%m %H:%M"),
+                            "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
+                            "DataFim": fim_dt
+                        })
+                        
+                        st.session_state.programados.pop(idx)
+                        st.success(f"Caderno de {item['Maquinista']} aberto para {inicio_dt.strftime('%d/%m às %H:%M')}!")
+                        st.rerun()
             st.divider()
     else:
         st.info("Nenhuma programação carregada. Faça o upload da planilha no menu lateral.")
+
