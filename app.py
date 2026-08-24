@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta, time
 import json
 import os
+import io
 
 st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="wide", page_icon="🚆")
 
@@ -17,7 +18,7 @@ DURACAO_ATIVIDADE = {
     "Outra Atividade": 8
 }
 
-# --- FUNÇÕES PARA SALVAR E CARREGAR DADOS ---
+# --- FUNÇÕES PARA SALVAR, CARREGAR E EXPORTAR DADOS ---
 def salvar_dados():
     em_jornada_serializavel = []
     if isinstance(st.session_state.get("em_jornada"), list):
@@ -71,6 +72,12 @@ def carregar_dados():
             st.session_state.programados = []
             st.session_state.em_jornada = []
             st.session_state.encerrados = []
+
+def gerar_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Jornadas')
+    return output.getvalue()
 
 if 'programados' not in st.session_state or 'em_jornada' not in st.session_state:
     carregar_dados()
@@ -171,6 +178,7 @@ with aba1:
     if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
         dados_tabela = []
+        texto_whatsapp = f"*🚆 RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
         
         for idx, m in enumerate(st.session_state.em_jornada):
             dt_fim = m.get("DataFim", agora)
@@ -201,8 +209,27 @@ with aba1:
                 "Encerrar Caderno?": False
             })
             
+            texto_whatsapp += f"👤 *{m.get('Maquinista')}* (Mat: {m.get('Matrícula')})\n"
+            texto_whatsapp += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
+            texto_whatsapp += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
+            
         df_operacao = pd.DataFrame(dados_tabela)
         
+        # Opções de Exportação
+        col_ex1, col_ex2 = st.columns([1, 1])
+        with col_ex1:
+            df_export = df_operacao.drop(columns=["Encerrar Caderno?"])
+            excel_bytes = gerar_excel(df_export)
+            st.download_button(
+                label="📥 Exportar para Excel (.xlsx)",
+                data=excel_bytes,
+                file_name=f"jornadas_em_andamento_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        with col_ex2:
+            with st.expander("📱 Copiar Texto para WhatsApp"):
+                st.code(texto_whatsapp, language="text")
+
         st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** para ajustar o horário final e fechar o caderno.")
         
         edited_df = st.data_editor(
@@ -261,7 +288,7 @@ with aba1:
     else:
         st.info("Nenhum caderno aberto no momento. Dê o START na aba de 'Programação'.")
 
-# --- ABA 2: PROGRAMAÇÃO (COM DATA E HORA MANUAIS AO STARTAR COM HORA PADRÃO 00:00) ---
+# --- ABA 2: PROGRAMAÇÃO ---
 with aba2:
     col_titulo, col_limpar = st.columns([3, 1])
     with col_titulo:
@@ -287,6 +314,14 @@ with aba2:
             })
             
         df_prog = pd.DataFrame(dados_prog)
+        
+        df_prog_export = df_prog.drop(columns=["Dar Start?"])
+        st.download_button(
+            label="📥 Exportar Programação para Excel (.xlsx)",
+            data=gerar_excel(df_prog_export),
+            file_name=f"programacao_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         
         st.caption("💡 Marque a caixinha **'Dar Start?'** para ajustar a data/hora de abertura e iniciar o caderno.")
         
@@ -345,6 +380,14 @@ with aba3:
     
     if len(st.session_state.encerrados) > 0:
         df_enc = pd.DataFrame(st.session_state.encerrados)
+        
+        st.download_button(
+            label="📥 Exportar Histórico para Excel (.xlsx)",
+            data=gerar_excel(df_enc),
+            file_name=f"historico_jornadas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
         st.dataframe(df_enc, use_container_width=True, hide_index=True)
         
         if st.button("🗑️ Limpar Histórico"):
