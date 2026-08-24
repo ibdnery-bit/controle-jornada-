@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import json
+import os
 
 st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="wide", page_icon="🚆")
 
-st.title("🚆 Controle Operacional de Jornada")
+ARQUIVO_BANCO = "dados_jornada.json"
 
-# Mapeamento padrao de horas por atividade
+# Mapeamento padrão de horas por atividade
 DURACAO_ATIVIDADE = {
     "Viagem": 10,
     "Manobra": 6,
@@ -15,16 +17,57 @@ DURACAO_ATIVIDADE = {
     "Outra Atividade": 8
 }
 
-# Inicializacao da memoria do app
-if 'programados' not in st.session_state:
-    st.session_state.programados = []
+# --- FUNÇÕES PARA SALVAR E CARREGAR DADOS ---
+def salvar_dados():
+    em_jornada_serializavel = []
+    for item in st.session_state.em_jornada:
+        copia = item.copy()
+        if isinstance(copia.get("DataFim"), datetime):
+            copia["DataFim"] = copia["DataFim"].strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(copia.get("DataInicioDT"), datetime):
+            copia["DataInicioDT"] = copia["DataInicioDT"].strftime("%Y-%m-%d %H:%M:%S")
+        em_jornada_serializavel.append(copia)
+        
+    dados = {
+        "programados": st.session_state.programados,
+        "em_jornada": em_jornada_serializavel,
+        "encerrados": st.session_state.get("encerrados", [])
+    }
+    with open(ARQUIVO_BANCO, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
 
-if 'em_jornada' not in st.session_state:
-    st.session_state.em_jornada = []
+def carregar_dados():
+    if os.path.exists(ARQUIVO_BANCO):
+        try:
+            with open(ARQUIVO_BANCO, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+                st.session_state.programados = dados.get("programados", [])
+                st.session_state.encerrados = dados.get("encerrados", [])
+                
+                em_jornada = dados.get("em_jornada", [])
+                for item in em_jornada:
+                    if "DataFim" in item and isinstance(item["DataFim"], str):
+                        item["DataFim"] = datetime.strptime(item["DataFim"], "%Y-%m-%d %H:%M:%S")
+                    if "DataInicioDT" in item and isinstance(item["DataInicioDT"], str):
+                        item["DataInicioDT"] = datetime.strptime(item["DataInicioDT"], "%Y-%m-%d %H:%M:%S")
+                st.session_state.em_jornada = em_jornada
+        except Exception:
+            st.session_state.programados = []
+            st.session_state.em_jornada = []
+            st.session_state.encerrados = []
+
+# Inicialização
+if 'programados' not in st.session_state or 'em_jornada' not in st.session_state:
+    carregar_dados()
+
+if 'encerrados' not in st.session_state:
+    st.session_state.encerrados = []
+
+st.title("🚆 Controle Operacional de Jornada")
 
 st.sidebar.header("⚙️ Opções e Carga")
 
-# --- IMPORTACAO DA PLANILHA ---
+# --- 1. IMPORTAÇÃO DA PLANILHA ---
 st.sidebar.subheader("📂 Programação Diária (.xlsx / .csv)")
 arquivo_enviado = st.sidebar.file_uploader("Carregar Escala do Dia", type=["xlsx", "csv"])
 
@@ -55,30 +98,61 @@ if arquivo_enviado is not None:
                     "Trecho": f"{origem} ➔ {destino}"
                 })
                 
-            st.session_state.programados = novos_programados
+            st.session_state.programados.extend(novos_programados)
             st.session_state.ultimo_arquivo = arquivo_enviado.name
-            st.sidebar.success(f"✅ {len(novos_programados)} maquinistas carregados!")
+            salvar_dados()
+            st.sidebar.success(f"✅ {len(novos_programados)} maquinistas adicionados!")
         except Exception as e:
             st.sidebar.error(f"Erro ao ler arquivo: {e}")
 
 st.sidebar.markdown("---")
 
-# --- NAVEGACAO POR ABAS ---
-aba1, aba2 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)"])
+# --- 2. LANÇAMENTO MANUAL ---
+st.sidebar.subheader("✍️ Lançamento Manual")
+with st.sidebar.form("form_manual", clear_on_submit=True):
+    m_nome = st.text_input("Nome do Maquinista")
+    m_mat = st.text_input("Matrícula")
+    m_ativ = st.selectbox("Atividade", list(DURACAO_ATIVIDADE.keys()))
+    m_trem = st.text_input("Trem / Prefixo")
+    m_loco = st.text_input("Locomotiva")
+    m_orig = st.text_input("Origem")
+    m_dest = st.text_input("Destino")
+    
+    btn_manual = st.form_submit_button("➕ Adicionar à Escala")
+    
+    if btn_manual:
+        if m_nome.strip() != "":
+            st.session_state.programados.append({
+                "Matrícula": m_mat if m_mat else "-",
+                "Maquinista": m_nome,
+                "Atividade": m_ativ,
+                "Trem": m_trem if m_trem else "-",
+                "Locomotiva": m_loco if m_loco else "-",
+                "Trecho": f"{m_orig if m_orig else '-'} ➔ {m_dest if m_dest else '-'}"
+            })
+            salvar_dados()
+            st.sidebar.success(f"✅ {m_nome} adicionado com sucesso!")
+            st.rerun()
+        else:
+            st.sidebar.warning("Por favor, digite o nome do maquinista.")
 
-# --- ABA 1: EM OPERACAO ---
+st.sidebar.markdown("---")
+
+# --- NAVEGAÇÃO POR ABAS ---
+aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)", "📊 Histórico e Performance"])
+
+# --- ABA 1: EM OPERAÇÃO ---
 with aba1:
-    st.subheader("🟢 Maquinistas com Caderno Aberto / Em Operação")
+    st.subheader("🟢 Maquinistas em Operação")
     
     if st.session_state.em_jornada:
         agora = datetime.now()
-        lista_exibicao = []
         
         for idx, m in enumerate(st.session_state.em_jornada):
             tempo_restante_min = int((m["DataFim"] - agora).total_seconds() / 60)
             
             if tempo_restante_min <= 0:
-                status = "🔴 JORNADA EXCEDIDA / ENCERRAR"
+                status = "🔴 JORNADA EXCEDIDA"
                 restante_fmt = "00h 00m"
             elif tempo_restante_min <= 60:
                 status = "⚠️ ATENÇÃO: Menos de 1h"
@@ -91,40 +165,68 @@ with aba1:
                 minutos = tempo_restante_min % 60
                 restante_fmt = f"{horas:02d}h {minutos:02d}m"
                 
-            lista_exibicao.append({
-                "Maquinista": m["Maquinista"],
-                "Matrícula": m["Matrícula"],
-                "Atividade": m["Atividade"],
-                "Trem/Loco": f"{m['Trem']} / {m['Locomotiva']}",
-                "Abertura Caderno": m["Início"],
-                "Fim Previsto": m["Fim Previsto"],
-                "Tempo Restante": restante_fmt,
-                "Status": status
-            })
+            st.markdown(f"### 🚆 {m['Maquinista']} (Matrícula: {m['Matrícula']}) — {status}")
+            st.write(f"**Atividade:** {m['Atividade']} | **Trem/Loco:** {m['Trem']} / {m['Locomotiva']} | **Abertura:** {m['Início']} | **Fim Previsto:** {m['Fim Previsto']} | **Tempo Restante:** {restante_fmt}")
             
-        st.dataframe(pd.DataFrame(lista_exibicao), use_container_width=True)
-        
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("🔄 Atualizar Tempos"):
-                st.rerun()
-        with col_btn2:
-            if st.button("🗑️ Encerrar / Limpar Todos"):
-                st.session_state.em_jornada = []
-                st.rerun()
+            with st.expander(f"🛑 Fechar Caderno de {m['Maquinista']}", expanded=False):
+                col_d_fim, col_h_fim, col_btn_fim = st.columns([2, 2, 2])
+                with col_d_fim:
+                    dt_enc = st.date_input("Data de Fechamento", value=datetime.now().date(), key=f"dt_enc_{idx}")
+                with col_h_fim:
+                    hr_enc = st.time_input("Horário de Fechamento", value=datetime.now().time(), key=f"hr_enc_{idx}")
+                with col_btn_fim:
+                    st.write("")
+                    st.write("")
+                    if st.button("✅ Confirmar Fechamento", key=f"btn_close_{idx}"):
+                        fim_real_dt = datetime.combine(dt_enc, hr_enc)
+                        inicio_real_dt = m.get("DataInicioDT", datetime.now())
+                        
+                        # Cálculo exato da duração
+                        duracao_min = int((fim_real_dt - inicio_real_dt).total_seconds() / 60)
+                        if duracao_min < 0:
+                            duracao_min = 0
+                        dur_horas = duracao_min // 60
+                        dur_mins = duracao_min % 60
+                        duracao_formatada = f"{dur_horas:02d}h {dur_mins:02d}m"
+                        
+                        st.session_state.encerrados.append({
+                            "Maquinista": m["Maquinista"],
+                            "Matrícula": m["Matrícula"],
+                            "Atividade": m["Atividade"],
+                            "Trem/Loco": f"{m['Trem']} / {m['Locomotiva']}",
+                            "Abertura": m["Início"],
+                            "Fechamento": fim_real_dt.strftime("%d/%m %H:%M"),
+                            "Tempo de Caderno Aberto": duracao_formatada
+                        })
+                        
+                        st.session_state.em_jornada.pop(idx)
+                        salvar_dados()
+                        st.success(f"Caderno de {m['Maquinista']} encerrado com duração de {duracao_formatada}!")
+                        st.rerun()
+            st.divider()
+            
+        if st.button("🔄 Atualizar Horários"):
+            st.rerun()
     else:
         st.info("Nenhum caderno aberto no momento. Dê o START na aba de 'Programação'.")
 
 # --- ABA 2: LISTA DE ESPERA E START ---
 with aba2:
-    st.subheader("📋 Lista da Escala do Dia")
+    col_titulo, col_limpar = st.columns([3, 1])
+    with col_titulo:
+        st.subheader("📋 Lista da Escala do Dia")
+    with col_limpar:
+        if st.session_state.programados:
+            if st.button("🗑️ Limpar Escala"):
+                st.session_state.programados = []
+                salvar_dados()
+                st.rerun()
     
     if st.session_state.programados:
         for idx, item in enumerate(st.session_state.programados):
             st.markdown(f"### 🚆 {item['Maquinista']} (Matrícula: {item['Matrícula']})")
             st.write(f"**Atividade:** {item['Atividade']} | **Trem/Loco:** {item['Trem']} / {item['Locomotiva']} | **Trecho:** {item['Trecho']}")
             
-            # Formulario individual de Start com Data e Hora ajustaveis
             with st.expander(f"▶️ Abrir Caderno para {item['Maquinista']}", expanded=False):
                 col_data, col_hora, col_btn = st.columns([2, 2, 2])
                 
@@ -133,7 +235,7 @@ with aba2:
                 with col_hora:
                     hora_inicio = st.time_input("Horário de Início", value=datetime.now().time(), key=f"hr_{idx}")
                 with col_btn:
-                    st.write("") # Espaçamento vertical
+                    st.write("")
                     st.write("")
                     if st.button("✅ Confirmar Start", key=f"btn_confirm_{idx}"):
                         inicio_dt = datetime.combine(data_inicio, hora_inicio)
@@ -148,13 +250,31 @@ with aba2:
                             "Locomotiva": item["Locomotiva"],
                             "Início": inicio_dt.strftime("%d/%m %H:%M"),
                             "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
-                            "DataFim": fim_dt
+                            "DataFim": fim_dt,
+                            "DataInicioDT": inicio_dt
                         })
                         
                         st.session_state.programados.pop(idx)
-                        st.success(f"Caderno de {item['Maquinista']} aberto para {inicio_dt.strftime('%d/%m às %H:%M')}!")
+                        salvar_dados()
+                        st.success(f"Caderno de {item['Maquinista']} aberto às {inicio_dt.strftime('%H:%M')}!")
                         st.rerun()
             st.divider()
     else:
-        st.info("Nenhuma programação carregada. Faça o upload da planilha no menu lateral.")
+        st.info("Nenhuma programação carregada. Faça o upload da planilha ou lance manualmente no menu lateral.")
 
+# --- ABA 3: HISTÓRICO E PERFORMANCE ---
+with aba3:
+    st.subheader("📊 Histórico de Jornadas Concluídas")
+    
+    if st.session_state.encerrados:
+        df_enc = pd.DataFrame(st.session_state.encerrados)
+        st.dataframe(df_enc, use_container_width=True)
+        
+        col_exp, col_del = st.columns([2, 1])
+        with col_del:
+            if st.button("🗑️ Limpar Histórico"):
+                st.session_state.encerrados = []
+                salvar_dados()
+                st.rerun()
+    else:
+        st.info("Nenhum caderno foi encerrado até o momento.")
