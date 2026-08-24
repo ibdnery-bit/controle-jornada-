@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import json
 import os
 
@@ -141,7 +141,7 @@ with st.sidebar.expander("➕ Inserir Manualmente"):
         m_orig = st.text_input("Origem")
         m_dest = st.text_input("Destino")
         
-        btn_manual = st.form_submit_button(" Confirmar Lançamento")
+        btn_manual = st.form_submit_button("Confirmar Lançamento")
         
         if btn_manual:
             if m_nome.strip() != "":
@@ -225,7 +225,7 @@ with aba1:
             with col_d:
                 data_fechamento = st.date_input("Data de Fechamento", value=datetime.now().date(), key="dt_fechar")
             with col_h:
-                hora_fechamento = st.time_input("Hora de Fechamento", value=datetime.now().time(), key="hr_fechar")
+                hora_fechamento = st.time_input("Hora de Fechamento", value=time(0, 0), key="hr_fechar")
                 
             with col_btn:
                 st.write("")
@@ -261,7 +261,7 @@ with aba1:
     else:
         st.info("Nenhum caderno aberto no momento. Dê o START na aba de 'Programação'.")
 
-# --- ABA 2: PROGRAMAÇÃO ---
+# --- ABA 2: PROGRAMAÇÃO (COM DATA E HORA MANUAIS AO STARTAR COM HORA PADRÃO 00:00) ---
 with aba2:
     col_titulo, col_limpar = st.columns([3, 1])
     with col_titulo:
@@ -288,7 +288,7 @@ with aba2:
             
         df_prog = pd.DataFrame(dados_prog)
         
-        st.caption("💡 Marque a caixinha **'Dar Start?'** para abrir o caderno do maquinista.")
+        st.caption("💡 Marque a caixinha **'Dar Start?'** para ajustar a data/hora de abertura e iniciar o caderno.")
         
         edited_prog = st.data_editor(
             df_prog,
@@ -301,28 +301,41 @@ with aba2:
         linhas_start = edited_prog[edited_prog["Dar Start?"] == True]
         
         if not linhas_start.empty:
-            for index, row in linhas_start.iterrows():
-                item_start = st.session_state.programados[index]
-                inicio_dt = datetime.now()
-                duracao_horas = DURACAO_ATIVIDADE.get(item_start.get('Atividade'), 8)
-                fim_dt = inicio_dt + timedelta(hours=duracao_horas)
+            idx_start_sel = linhas_start.index[0]
+            item_start = st.session_state.programados[idx_start_sel]
+            
+            st.info(f"🚀 **Ajuste de Abertura do Caderno:** {item_start.get('Maquinista')}")
+            
+            col_sd, col_sh, col_sbtn = st.columns([1.5, 1.5, 1.5])
+            with col_sd:
+                data_inicio = st.date_input("Data de Início", value=datetime.now().date(), key="dt_start")
+            with col_sh:
+                hora_inicio = st.time_input("Hora de Início", value=time(0, 0), key="hr_start")
                 
-                st.session_state.em_jornada.append({
-                    "Maquinista": item_start.get("Maquinista", "-"),
-                    "Matrícula": item_start.get("Matrícula", "-"),
-                    "Atividade": item_start.get("Atividade", "Viagem"),
-                    "Trem": item_start.get("Trem", "-"),
-                    "Locomotiva": item_start.get("Locomotiva", "-"),
-                    "Início": inicio_dt.strftime("%d/%m %H:%M"),
-                    "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
-                    "DataFim": fim_dt,
-                    "DataInicioDT": inicio_dt
-                })
-                
-                st.session_state.programados.pop(index)
-                salvar_dados()
-                st.success(f"Caderno de {item_start.get('Maquinista')} aberto!")
-                st.rerun()
+            with col_sbtn:
+                st.write("")
+                st.write("")
+                if st.button("Confirmar Start Manual", type="primary"):
+                    inicio_dt = datetime.combine(data_inicio, hora_inicio)
+                    duracao_horas = DURACAO_ATIVIDADE.get(item_start.get('Atividade'), 8)
+                    fim_dt = inicio_dt + timedelta(hours=duracao_horas)
+                    
+                    st.session_state.em_jornada.append({
+                        "Maquinista": item_start.get("Maquinista", "-"),
+                        "Matrícula": item_start.get("Matrícula", "-"),
+                        "Atividade": item_start.get("Atividade", "Viagem"),
+                        "Trem": item_start.get("Trem", "-"),
+                        "Locomotiva": item_start.get("Locomotiva", "-"),
+                        "Início": inicio_dt.strftime("%d/%m %H:%M"),
+                        "Fim Previsto": fim_dt.strftime("%d/%m %H:%M"),
+                        "DataFim": fim_dt,
+                        "DataInicioDT": inicio_dt
+                    })
+                    
+                    st.session_state.programados.pop(idx_start_sel)
+                    salvar_dados()
+                    st.success(f"Caderno de {item_start.get('Maquinista')} aberto com sucesso!")
+                    st.rerun()
     else:
         st.info("Nenhuma programação carregada. Faça o upload da planilha ou lance manualmente no menu lateral.")
 
