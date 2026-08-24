@@ -178,7 +178,7 @@ with aba1:
     if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
         dados_tabela = []
-        texto_whatsapp = f"* RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
+        texto_whatsapp_op = f"*📋 RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
         
         for idx, m in enumerate(st.session_state.em_jornada):
             dt_fim = m.get("DataFim", agora)
@@ -209,9 +209,9 @@ with aba1:
                 "Encerrar Caderno?": False
             })
             
-            texto_whatsapp += f"👤 *{m.get('Maquinista')}* (Mat: {m.get('Matrícula')})\n"
-            texto_whatsapp += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
-            texto_whatsapp += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
+            texto_whatsapp_op += f"👤 *{m.get('Maquinista')}* (Mat: {m.get('Matrícula')})\n"
+            texto_whatsapp_op += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
+            texto_whatsapp_op += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
             
         df_operacao = pd.DataFrame(dados_tabela)
 
@@ -246,7 +246,7 @@ with aba1:
         with col_btn3:
             with st.popover("📱 Resumo WhatsApp", use_container_width=True):
                 st.markdown("**Copie o texto abaixo para enviar:**")
-                st.code(texto_whatsapp, language="text")
+                st.code(texto_whatsapp_op, language="text")
 
         # --- SEÇÃO DE FECHAMENTO (APARECE APENAS AO MARCAR A CAIXINHA) ---
         linhas_encerradas = edited_df[edited_df["Encerrar Caderno?"] == True]
@@ -298,18 +298,12 @@ with aba1:
 
 # --- ABA 2: PROGRAMAÇÃO ---
 with aba2:
-    col_titulo, col_limpar = st.columns([3, 1])
-    with col_titulo:
-        st.subheader("📋 Escala Agendada")
-    with col_limpar:
-        if len(st.session_state.programados) > 0:
-            if st.button("🗑️ Limpar Escala"):
-                st.session_state.programados = []
-                salvar_dados()
-                st.rerun()
+    st.subheader("📋 Escala Agendada")
     
     if len(st.session_state.programados) > 0:
         dados_prog = []
+        texto_whatsapp_prog = f"*📋 PROGRAMAÇÃO DE ESCALA - {datetime.now().strftime('%d/%m/%Y')}*\n\n"
+        
         for item in st.session_state.programados:
             dados_prog.append({
                 "Maquinista": item.get("Maquinista", "-"),
@@ -320,6 +314,10 @@ with aba2:
                 "Trecho": item.get("Trecho", "-"),
                 "Dar Start?": False
             })
+            
+            texto_whatsapp_prog += f"👤 *{item.get('Maquinista')}* (Mat: {item.get('Matrícula')})\n"
+            texto_whatsapp_prog += f"🔹 Atividade: {item.get('Atividade')} | Trem/Loco: {item.get('Trem')}/{item.get('Locomotiva')}\n"
+            texto_whatsapp_prog += f"📍 Trecho: {item.get('Trecho')}\n\n"
             
         df_prog = pd.DataFrame(dados_prog)
         
@@ -333,15 +331,31 @@ with aba2:
             key="editor_programados"
         )
         
-        df_prog_export = df_prog.drop(columns=["Dar Start?"])
-        st.download_button(
-            label="📥 Exportar Programação para Excel (.xlsx)",
-            data=gerar_excel(df_prog_export),
-            file_name=f"programacao_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+        # --- BOTÕES DE AÇÃO ABAIXO DA TABELA DE PROGRAMAÇÃO ---
+        col_p1, col_p2, col_p3 = st.columns([1, 1, 1])
         
+        with col_p1:
+            df_prog_export = df_prog.drop(columns=["Dar Start?"])
+            st.download_button(
+                label="📥 Exportar Excel",
+                data=gerar_excel(df_prog_export),
+                file_name=f"programacao_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            
+        with col_p2:
+            with st.popover("📱 Resumo WhatsApp", use_container_width=True):
+                st.markdown("**Copie o texto abaixo para enviar:**")
+                st.code(texto_whatsapp_prog, language="text")
+                
+        with col_p3:
+            if st.button("🗑️ Limpar Escala", use_container_width=True):
+                st.session_state.programados = []
+                salvar_dados()
+                st.rerun()
+
+        # --- SEÇÃO DE START MANUAL (APARECE AO MARCAR A CAIXINHA) ---
         linhas_start = edited_prog[edited_prog["Dar Start?"] == True]
         
         if not linhas_start.empty:
