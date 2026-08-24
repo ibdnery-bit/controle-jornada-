@@ -29,13 +29,14 @@ st.sidebar.subheader("📂 Programação Diária (.xlsx / .csv)")
 arquivo_enviado = st.sidebar.file_uploader("Carregar Escala do Dia", type=["xlsx", "csv"])
 
 if arquivo_enviado is not None:
-    try:
-        if arquivo_enviado.name.endswith('.csv'):
-            df_importado = pd.read_csv(arquivo_enviado)
-        else:
-            df_importado = pd.read_excel(arquivo_enviado)
-            
-        if st.sidebar.button("Carregar Programação"):
+    # Processa automaticamente assim que o arquivo é enviado
+    if 'ultimo_arquivo' not in st.session_state or st.session_state.ultimo_arquivo != arquivo_enviado.name:
+        try:
+            if arquivo_enviado.name.endswith('.csv'):
+                df_importado = pd.read_csv(arquivo_enviado)
+            else:
+                df_importado = pd.read_excel(arquivo_enviado)
+                
             novos_programados = []
             for _, linha in df_importado.iterrows():
                 nome = str(linha.get("Maquinista", linha.get("Nome", "Não informado")))
@@ -56,10 +57,10 @@ if arquivo_enviado is not None:
                 })
                 
             st.session_state.programados = novos_programados
-            st.sidebar.success(f"{len(novos_programados)} maquinistas carregados na programação!")
-            st.rerun()
-    except Exception as e:
-        st.sidebar.error(f"Erro ao ler arquivo: {e}")
+            st.session_state.ultimo_arquivo = arquivo_enviado.name
+            st.sidebar.success(f"✅ {len(novos_programados)} maquinistas carregados!")
+        except Exception as e:
+            st.sidebar.error(f"Erro ao ler arquivo: {e}")
 
 st.sidebar.markdown("---")
 
