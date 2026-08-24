@@ -178,7 +178,7 @@ with aba1:
     if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
         dados_tabela = []
-        texto_whatsapp = f"*🚆 RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
+        texto_whatsapp = f"* RESUMO DE JORNADAS EM OPERAÇÃO - {agora.strftime('%d/%m/%Y %H:%M')}*\n\n"
         
         for idx, m in enumerate(st.session_state.em_jornada):
             dt_fim = m.get("DataFim", agora)
@@ -214,21 +214,6 @@ with aba1:
             texto_whatsapp += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
             
         df_operacao = pd.DataFrame(dados_tabela)
-        
-        # Opções de Exportação
-        col_ex1, col_ex2 = st.columns([1, 1])
-        with col_ex1:
-            df_export = df_operacao.drop(columns=["Encerrar Caderno?"])
-            excel_bytes = gerar_excel(df_export)
-            st.download_button(
-                label="📥 Exportar para Excel (.xlsx)",
-                data=excel_bytes,
-                file_name=f"jornadas_em_andamento_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with col_ex2:
-            with st.expander("📱 Copiar Texto para WhatsApp"):
-                st.code(texto_whatsapp, language="text")
 
         st.caption("💡 Marque a caixinha **'Encerrar Caderno?'** para ajustar o horário final e fechar o caderno.")
         
@@ -239,13 +224,38 @@ with aba1:
             disabled=["Status", "Maquinista", "Matrícula", "Atividade", "Trem / Loco", "Abertura", "Restante"],
             key="editor_operacao"
         )
+
+        # --- BOTÕES DE AÇÃO ABAIXO DA TABELA ---
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
         
+        with col_btn1:
+            if st.button("🔄 Atualizar Tempos", use_container_width=True):
+                st.rerun()
+                
+        with col_btn2:
+            df_export = df_operacao.drop(columns=["Encerrar Caderno?"])
+            excel_bytes = gerar_excel(df_export)
+            st.download_button(
+                label="📥 Exportar Excel",
+                data=excel_bytes,
+                file_name=f"jornadas_em_andamento_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            
+        with col_btn3:
+            with st.popover("📱 Resumo WhatsApp", use_container_width=True):
+                st.markdown("**Copie o texto abaixo para enviar:**")
+                st.code(texto_whatsapp, language="text")
+
+        # --- SEÇÃO DE FECHAMENTO (APARECE APENAS AO MARCAR A CAIXINHA) ---
         linhas_encerradas = edited_df[edited_df["Encerrar Caderno?"] == True]
         
         if not linhas_encerradas.empty:
             idx_selecionado = linhas_encerradas.index[0]
             m_target = st.session_state.em_jornada[idx_selecionado]
             
+            st.markdown("---")
             st.warning(f"🛑 **Ajuste de Encerramento do Caderno:** {m_target.get('Maquinista')}")
             
             col_d, col_h, col_btn = st.columns([1.5, 1.5, 1.5])
@@ -283,8 +293,6 @@ with aba1:
                     st.success(f"Caderno de {m_target.get('Maquinista')} encerrado com sucesso!")
                     st.rerun()
 
-        if st.button("🔄 Atualizar Tempos"):
-            st.rerun()
     else:
         st.info("Nenhum caderno aberto no momento. Dê o START na aba de 'Programação'.")
 
@@ -315,14 +323,6 @@ with aba2:
             
         df_prog = pd.DataFrame(dados_prog)
         
-        df_prog_export = df_prog.drop(columns=["Dar Start?"])
-        st.download_button(
-            label="📥 Exportar Programação para Excel (.xlsx)",
-            data=gerar_excel(df_prog_export),
-            file_name=f"programacao_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
         st.caption("💡 Marque a caixinha **'Dar Start?'** para ajustar a data/hora de abertura e iniciar o caderno.")
         
         edited_prog = st.data_editor(
@@ -333,12 +333,22 @@ with aba2:
             key="editor_programados"
         )
         
+        df_prog_export = df_prog.drop(columns=["Dar Start?"])
+        st.download_button(
+            label="📥 Exportar Programação para Excel (.xlsx)",
+            data=gerar_excel(df_prog_export),
+            file_name=f"programacao_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
         linhas_start = edited_prog[edited_prog["Dar Start?"] == True]
         
         if not linhas_start.empty:
             idx_start_sel = linhas_start.index[0]
             item_start = st.session_state.programados[idx_start_sel]
             
+            st.markdown("---")
             st.info(f"🚀 **Ajuste de Abertura do Caderno:** {item_start.get('Maquinista')}")
             
             col_sd, col_sh, col_sbtn = st.columns([1.5, 1.5, 1.5])
@@ -381,18 +391,21 @@ with aba3:
     if len(st.session_state.encerrados) > 0:
         df_enc = pd.DataFrame(st.session_state.encerrados)
         
-        st.download_button(
-            label="📥 Exportar Histórico para Excel (.xlsx)",
-            data=gerar_excel(df_enc),
-            file_name=f"historico_jornadas_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
         st.dataframe(df_enc, use_container_width=True, hide_index=True)
         
-        if st.button("🗑️ Limpar Histórico"):
-            st.session_state.encerrados = []
-            salvar_dados()
-            st.rerun()
+        col_h1, col_h2 = st.columns([1, 1])
+        with col_h1:
+            st.download_button(
+                label="📥 Exportar Histórico para Excel (.xlsx)",
+                data=gerar_excel(df_enc),
+                file_name=f"historico_jornadas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        with col_h2:
+            if st.button("🗑️ Limpar Histórico", use_container_width=True):
+                st.session_state.encerrados = []
+                salvar_dados()
+                st.rerun()
     else:
         st.info("Nenhum caderno foi encerrado até o momento.")
