@@ -7,36 +7,6 @@ import io
 
 st.set_page_config(page_title="Controle Operacional de Jornada - MRS", layout="wide", page_icon="🚆")
 
-# --- ESTILIZAÇÃO CSS CORPORATIVA (CARDS E TIPOGRAFIA) ---
-st.markdown("""
-    <style>
-    /* Estilização dos Cards KPI */
-    .kpi-card {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 12px 16px;
-        border-left: 5px solid #6c757d;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        margin-bottom: 10px;
-    }
-    .kpi-normal { border-left-color: #28a745 !important; }
-    .kpi-atencao { border-left-color: #ffc107 !important; }
-    .kpi-critico { border-left-color: #dc3545 !important; }
-    
-    .kpi-title {
-        font-size: 0.85rem;
-        color: #6c757d;
-        font-weight: 600;
-        margin-bottom: 2px;
-    }
-    .kpi-value {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: #212529;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 ARQUIVO_BANCO = "dados_jornada.json"
 
 DURACAO_ATIVIDADE = {
@@ -178,38 +148,47 @@ if arquivo_enviado is not None:
         except Exception as e:
             st.sidebar.error(f"Erro ao ler arquivo: {e}")
 
-        # --- PAINEL ULTRA COMPACTO (1 LINHA NO MOBILE) ---
-        st.markdown(f'''
-            <div style="
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                background-color: #f8f9fa; 
-                padding: 8px 12px; 
-                border-radius: 8px; 
-                border: 1px solid #e9ecef;
-                margin-bottom: 15px;
-                font-family: sans-serif;
-            ">
-                <div style="text-align: center;">
-                    <span style="font-size: 0.75rem; color: #6c757d; display: block;">TOTAL</span>
-                    <strong style="font-size: 1.1rem; color: #212529;">{c_total}</strong>
-                </div>
-                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
-                    <span style="font-size: 0.75rem; color: #28a745; display: block;">🟢 NORMAL</span>
-                    <strong style="font-size: 1.1rem; color: #28a745;">{c_normal}</strong>
-                </div>
-                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
-                    <span style="font-size: 0.75rem; color: #ffc107; display: block;">⚠️ ATENÇÃO</span>
-                    <strong style="font-size: 1.1rem; color: #d39e00;">{c_atencao}</strong>
-                </div>
-                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
-                    <span style="font-size: 0.75rem; color: #dc3545; display: block;">🔴 RISCO</span>
-                    <strong style="font-size: 1.1rem; color: #dc3545;">{c_critico}</strong>
-                </div>
-            </div>
-        ''', unsafe_allow_html=True)
+st.sidebar.markdown("---")
 
+# --- LANÇAMENTO MANUAL ---
+st.sidebar.subheader("✍️ Lançamento Manual")
+
+with st.sidebar.expander("➕ Inserir Manualmente"):
+    with st.form("form_manual", clear_on_submit=True):
+        m_nome = st.text_input("Nome do Maquinista")
+        m_mat = st.text_input("Matrícula")
+        m_ativ = st.selectbox("Atividade", list(DURACAO_ATIVIDADE.keys()))
+        m_trem = st.text_input("Trem / Prefixo")
+        m_loco = st.text_input("Locomotiva")
+        m_orig = st.text_input("Origem")
+        m_dest = st.text_input("Destino")
+        
+        btn_manual = st.form_submit_button("Confirmar Lançamento")
+        
+        if btn_manual:
+            if m_nome.strip() != "":
+                st.session_state.programados.append({
+                    "Matrícula": m_mat if m_mat else "-",
+                    "Maquinista": m_nome,
+                    "Atividade": m_ativ,
+                    "Trem": m_trem if m_trem else "-",
+                    "Locomotiva": m_loco if m_loco else "-",
+                    "Trecho": f"{m_orig if m_orig else '-'} ➔ {m_dest if m_dest else '-'}"
+                })
+                salvar_dados()
+                st.sidebar.success(f"✅ {m_nome} adicionado com sucesso!")
+                st.rerun()
+            else:
+                st.sidebar.warning("Por favor, digite o nome do maquinista.")
+
+st.sidebar.markdown("---")
+
+# --- ABAS ---
+aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)", "📊 Histórico e Performance"])
+
+# --- ABA 1: OPERAÇÃO ---
+with aba1:
+    st.subheader("🟢 Maquinistas em Operação")
     
     if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
@@ -260,41 +239,38 @@ if arquivo_enviado is not None:
             texto_whatsapp_op += f"🔹 Atividade: {m.get('Atividade')} | Trem/Loco: {m.get('Trem')}/{m.get('Locomotiva')}\n"
             texto_whatsapp_op += f"⏱️ Abertura: {m.get('Início')} | Restante: {restante_fmt} [{status}]\n\n"
 
-        # --- NOVO PAINEL COMPACTO DE CARDS KPI (VISUAL PROFISSIONAL) ---
-        k1, k2, k3, k4 = st.columns(4)
-        
-        with k1:
-            st.markdown(f'''
-                <div class="kpi-card">
-                    <div class="kpi-title">Total em Operação</div>
-                    <div class="kpi-value">{c_total}</div>
+        # --- FAIXA DE STATUS ULTRA COMPACTA (1 LINHA NO MOBILE) ---
+        st.markdown(f'''
+            <div style="
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                background-color: #f8f9fa; 
+                padding: 6px 12px; 
+                border-radius: 8px; 
+                border: 1px solid #e9ecef;
+                margin-bottom: 12px;
+                font-family: sans-serif;
+            ">
+                <div style="text-align: center;">
+                    <span style="font-size: 0.7rem; color: #6c757d; display: block; font-weight: 600;">TOTAL</span>
+                    <strong style="font-size: 1.1rem; color: #212529;">{c_total}</strong>
                 </div>
-            ''', unsafe_allow_html=True)
-            
-        with k2:
-            st.markdown(f'''
-                <div class="kpi-card kpi-normal">
-                    <div class="kpi-title">🟢 Em Ritmo Normal</div>
-                    <div class="kpi-value">{c_normal}</div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 6px;">
+                    <span style="font-size: 0.7rem; color: #28a745; display: block; font-weight: 600;">🟢 NORMAL</span>
+                    <strong style="font-size: 1.1rem; color: #28a745;">{c_normal}</strong>
                 </div>
-            ''', unsafe_allow_html=True)
-            
-        with k3:
-            st.markdown(f'''
-                <div class="kpi-card kpi-atencao">
-                    <div class="kpi-title">⚠️ Em Atenção / Risco</div>
-                    <div class="kpi-value">{c_atencao}</div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 6px;">
+                    <span style="font-size: 0.7rem; color: #d39e00; display: block; font-weight: 600;">⚠️ ATENÇÃO</span>
+                    <strong style="font-size: 1.1rem; color: #d39e00;">{c_atencao}</strong>
                 </div>
-            ''', unsafe_allow_html=True)
-            
-        with k4:
-            st.markdown(f'''
-                <div class="kpi-card kpi-critico">
-                    <div class="kpi-title">🔴 Excedidos</div>
-                    <div class="kpi-value">{c_critico}</div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 6px;">
+                    <span style="font-size: 0.7rem; color: #dc3545; display: block; font-weight: 600;">🔴 RISCO</span>
+                    <strong style="font-size: 1.1rem; color: #dc3545;">{c_critico}</strong>
                 </div>
-            ''', unsafe_allow_html=True)
-            
+            </div>
+        ''', unsafe_allow_html=True)
+
         df_operacao = pd.DataFrame(dados_tabela)
 
         busca_op = st.text_input("🔍 Filtrar Operação (Nome, Matrícula ou Trem):", "", placeholder="Digite para buscar...")
