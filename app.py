@@ -178,47 +178,38 @@ if arquivo_enviado is not None:
         except Exception as e:
             st.sidebar.error(f"Erro ao ler arquivo: {e}")
 
-st.sidebar.markdown("---")
+        # --- PAINEL ULTRA COMPACTO (1 LINHA NO MOBILE) ---
+        st.markdown(f'''
+            <div style="
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                background-color: #f8f9fa; 
+                padding: 8px 12px; 
+                border-radius: 8px; 
+                border: 1px solid #e9ecef;
+                margin-bottom: 15px;
+                font-family: sans-serif;
+            ">
+                <div style="text-align: center;">
+                    <span style="font-size: 0.75rem; color: #6c757d; display: block;">TOTAL</span>
+                    <strong style="font-size: 1.1rem; color: #212529;">{c_total}</strong>
+                </div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
+                    <span style="font-size: 0.75rem; color: #28a745; display: block;">🟢 NORMAL</span>
+                    <strong style="font-size: 1.1rem; color: #28a745;">{c_normal}</strong>
+                </div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
+                    <span style="font-size: 0.75rem; color: #ffc107; display: block;">⚠️ ATENÇÃO</span>
+                    <strong style="font-size: 1.1rem; color: #d39e00;">{c_atencao}</strong>
+                </div>
+                <div style="text-align: center; border-left: 1px solid #dee2e6; padding-left: 8px;">
+                    <span style="font-size: 0.75rem; color: #dc3545; display: block;">🔴 RISCO</span>
+                    <strong style="font-size: 1.1rem; color: #dc3545;">{c_critico}</strong>
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
 
-# --- LANÇAMENTO MANUAL ---
-st.sidebar.subheader("✍️ Lançamento Manual")
-
-with st.sidebar.expander("➕ Inserir Manualmente"):
-    with st.form("form_manual", clear_on_submit=True):
-        m_nome = st.text_input("Nome do Maquinista")
-        m_mat = st.text_input("Matrícula")
-        m_ativ = st.selectbox("Atividade", list(DURACAO_ATIVIDADE.keys()))
-        m_trem = st.text_input("Trem / Prefixo")
-        m_loco = st.text_input("Locomotiva")
-        m_orig = st.text_input("Origem")
-        m_dest = st.text_input("Destino")
-        
-        btn_manual = st.form_submit_button("Confirmar Lançamento")
-        
-        if btn_manual:
-            if m_nome.strip() != "":
-                st.session_state.programados.append({
-                    "Matrícula": m_mat if m_mat else "-",
-                    "Maquinista": m_nome,
-                    "Atividade": m_ativ,
-                    "Trem": m_trem if m_trem else "-",
-                    "Locomotiva": m_loco if m_loco else "-",
-                    "Trecho": f"{m_orig if m_orig else '-'} ➔ {m_dest if m_dest else '-'}"
-                })
-                salvar_dados()
-                st.sidebar.success(f"✅ {m_nome} adicionado com sucesso!")
-                st.rerun()
-            else:
-                st.sidebar.warning("Por favor, digite o nome do maquinista.")
-
-st.sidebar.markdown("---")
-
-# --- ABAS ---
-aba1, aba2, aba3 = st.tabs(["⏱️ Jornadas em Andamento", "📋 Programação (Aguardando Start)", "📊 Histórico e Performance"])
-
-# --- ABA 1: OPERAÇÃO ---
-with aba1:
-    st.subheader("🟢 Maquinistas em Operação")
     
     if len(st.session_state.em_jornada) > 0:
         agora = datetime.now()
